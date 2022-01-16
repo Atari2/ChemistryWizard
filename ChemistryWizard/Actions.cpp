@@ -40,7 +40,7 @@ std::wostream& operator<<(std::wostream& os, const Composto& compo) {
 
 static void populate_arguments(std::vector<std::string>& arguments, int necessary_arguments, std::string_view prompt) {
     std::cout << prompt;
-    // std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     fflush(stdin);
     std::cin.clear();
     while (necessary_arguments > 0) {
@@ -108,9 +108,9 @@ inline auto split_molecule_in_elements = [](std::string_view view) {
         }
         upper = std::isupper(c) != 0 ? UpperState::True : UpperState::False;
         if ((!num && previous_is_num) || check_upper()) {
-            if (curr_elem.empty()) error("Invalid element, arrived at %c", c);
+            if (curr_elem.empty()) error_invalid_element(curr_elem, c);
             auto it = elements_map.find(curr_elem);
-            if (it == map_end) error("Invalid element %s", curr_elem.c_str());
+            if (it == map_end) error_invalid_element(curr_elem);
             size_t sz = curr_elem_size.empty() ? 1 : std::stoull(curr_elem_size);
             elements.emplace_back((*it).second, sz);
             curr_elem_size.clear();
@@ -120,19 +120,66 @@ inline auto split_molecule_in_elements = [](std::string_view view) {
             curr_elem_size += c;
         } else {
             curr_elem += c;
-            if (curr_elem.size() > 2) error("Invalid element %s, name is more than 2 chars", curr_elem.c_str());
+            if (curr_elem.size() > 2) error_invalid_element(curr_elem);
         }
         previous_is_num = num;
         previous_is_upper = upper;
     }
-    if (curr_elem.empty()) error("Invalid last element");
+    if (curr_elem.empty()) error_invalid_element(curr_elem);
     auto it = elements_map.find(curr_elem);
-    if (it == map_end) error("Invalid element %s", curr_elem.c_str());
+    if (it == map_end) error_invalid_element(curr_elem);
     size_t sz = curr_elem_size.empty() ? 1 : std::stoull(curr_elem_size);
     size_t quantity = quantity_str.empty() ? 1 : std::stoull(quantity_str);
     elements.emplace_back((*it).second, sz);
     return Composto{std::move(elements), quantity};
 };
+
+int levenshtein_distance(std::string_view s1, std::string_view s2) {
+    size_t m = s1.size();
+    size_t n = s2.size();
+
+    int* prev = new int[(n + 1) * sizeof(int)];
+    int* curr = new int[(n + 1) * sizeof(int)];
+
+    for (size_t i = 0; i <= n; i++)
+        prev[i] = i;
+    
+    for (size_t i = 1; i <= m; i++) {
+        curr[0] = i;
+        for (size_t j = 1; j <= n; j++) {
+            if (std::tolower(s1[i - 1]) != std::tolower(s2[j - 1])) {
+                int k = std::min({curr[j - 1], prev[j - 1], prev[j]});
+                curr[j] = k + 1;
+            } else {
+                curr[j] = prev[j - 1];
+            }
+        }
+        std::swap(prev, curr);
+        std::memset(curr, 0, sizeof(int) * (n + 1));
+    }
+    int distance = prev[n];
+    delete[] curr;
+    delete[] prev;
+    return distance;
+}
+
+[[noreturn]] void error_invalid_element(const std::string& element, char c) {
+    if (element.empty()) {
+        if (c == '\0')
+            error("Manca l'ultimo elemento");
+        else
+            error("Elemento non valido: %s, arrivato a %c", element.c_str(), c);
+    } else {
+        std::array<int, elements.size()> distances{};
+        for (size_t i = 0; auto& elem : elements) {
+            distances[i++] = levenshtein_distance(elem->name(), element);
+        }
+        auto min_it = std::min_element(distances.begin(), distances.end());
+        auto idx = std::distance(distances.begin(), min_it);
+        error("Elemento non valido %s, forse intendevi %s (%s)?", element.c_str(), elements[idx]->name().data(), elements[idx]->full_name().data());
+    }
+
+}
 
 void do_balance(std::vector<std::string>& arguments) {
     if (arguments.empty())

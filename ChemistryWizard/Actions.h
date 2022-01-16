@@ -13,6 +13,8 @@ using namespace std::string_view_literals;
 #define TODO()                                                                                                         \
     error("La funzione `%s` non e' ancora stata implementata", std::source_location::current().function_name())
 
+int levenshtein_distance(std::string_view s1, std::string_view s2);
+
 template <size_t N, typename... Args>
 [[noreturn]] void error(const char (&fmt)[N], const Args&... args) {
     if constexpr (sizeof...(Args) == 0) {
@@ -26,6 +28,8 @@ template <size_t N, typename... Args>
     (void)getc(stdin);
     exit(EXIT_FAILURE);
 }
+
+[[noreturn]] void error_invalid_element(const std::string& elem, char c = '\0');
 
 template <char... Chars>
 struct tstring {

@@ -7,6 +7,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include <variant>
 
 using namespace std::string_view_literals;
 
@@ -75,6 +76,7 @@ class Element : public BaseElement {
     public:
     constexpr Element(int no, int nm, std::string_view full_name, std::wstring_view wfull_name) :
         m_numero_atomico{no}, m_numero_massa{nm}, m_full_name{full_name}, m_wfull_name{wfull_name} {}
+
     constexpr std::string_view name() const override { return m_name; }
     constexpr std::string_view full_name() const override { return m_full_name; }
     constexpr std::wstring_view wname() const override { return m_wname; }
@@ -90,10 +92,19 @@ class Element : public BaseElement {
     constexpr size_t size_no() const override { return m_numeri_ossidazione.size(); }
 };
 
-struct ElementQt {
+struct SingleElementQt {
     ElementRef element;
     size_t quantity;
 };
+
+using GroupElementRef = std::vector<SingleElementQt>;
+
+struct GroupElementQt {
+    GroupElementRef group;
+    size_t quantity;
+};
+
+using ElementQt = std::variant<SingleElementQt, GroupElementQt>;
 
 class Composto {
     std::vector<ElementQt> m_elements{};
@@ -107,6 +118,11 @@ class Composto {
     const ElementQt& operator[](size_t index) const { return m_elements[index]; }
     size_t size() const { return m_elements.size(); }
     size_t quantity() const { return m_quantity; }
+};
+
+struct Reazione {
+    std::vector<Composto> reagenti;
+    std::vector<Composto> prodotti;
 };
 
 // gruppo 1 -> metalli alcalini

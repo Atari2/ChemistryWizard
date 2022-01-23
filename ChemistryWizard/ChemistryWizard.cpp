@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
 2.  Riduzione
 3.  Altro)");
         int num_action = 0;
-        (void)scanf_s("%d", &num_action);
+        (void)scanf("%d", &num_action);
         if (num_action >= from_enum(Azione::__SIZE__)) {
             error("Azione non valida, il massimo e' %d, tu hai inserito %d", from_enum(Azione::__SIZE__) - 1,
                   num_action);

@@ -4,10 +4,47 @@
 #include <concepts>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <ranges>
 
+#include <QDebug>
+#include <QTextStream>
+
 template <typename T>
-concept OStream = std::same_as<T, std::ostream> || std::same_as<T, std::wostream>;
+concept QTStream = std::same_as<T, QDebug> || std::same_as<T, QTextStream>;
+
+template <typename T>
+concept OStream = std::same_as<T, std::ostream> || std::same_as<T, std::wostream> || QTStream<T>;
+
+decltype(auto) operator<<(QTStream auto& dbg, const std::string& str) {
+    if constexpr (std::same_as<decltype(dbg), QDebug>) {
+        QDebugStateSaver save(dbg);
+        dbg.nospace() << QString::fromStdString(str);
+    } else {
+        dbg << QString::fromStdString(str);
+    }
+    return dbg;
+}
+
+decltype(auto) operator<<(QTStream auto& dbg, const std::wstring& str) {
+    if constexpr (std::same_as<decltype(dbg), QDebug>) {
+        QDebugStateSaver save(dbg);
+        dbg.nospace() << QString::fromStdWString(str);
+    } else {
+        dbg << QString::fromStdWString(str);
+    }
+    return dbg;
+}
+
+decltype(auto) operator<<(QTStream auto& dbg, const std::string_view& str) {
+    if constexpr (std::same_as<decltype(dbg), QDebug>) {
+        QDebugStateSaver save(dbg);
+        dbg.nospace() << QString::fromLocal8Bit(str.data(), str.size());
+    } else {
+        dbg << QString::fromLocal8Bit(str.data(), str.size());
+    }
+    return dbg;
+}
 
 template <OStream StreamT,
           typename StringT = std::conditional_t<std::same_as<StreamT, std::wostream>, std::wstring, std::string>>
@@ -15,9 +52,9 @@ void print_single_element(StreamT& os, const SingleElementQt& elem, size_t n_tab
     StringT tabs(n_tabs, '\t');
     const auto& [belem, sz] = elem;
     if constexpr (std::same_as<StreamT, std::wostream>) {
-        os << tabs << belem->wfull_name() << ' ' << belem->wname() << ' ' << belem->no() << ' ' << belem->nm();
+        os << tabs << belem->wfull_name() << ' ' << belem->wname() << ' ' << belem->na() << ' ' << belem->ma();
     } else {
-        os << tabs << belem->full_name() << ' ' << belem->name() << ' ' << belem->no() << ' ' << belem->nm();
+        os << tabs << belem->full_name() << ' ' << belem->name() << ' ' << belem->na() << ' ' << belem->ma();
     }
     if (belem->size_no() > 0) {
         os << ' ';
@@ -25,64 +62,59 @@ void print_single_element(StreamT& os, const SingleElementQt& elem, size_t n_tab
             os << (*belem)[i] << ' ';
         }
     }
-    os << ", quantità: " << sz << '\n';
+    os << ", quantitÃ : " << sz << '\n';
 }
 
-template <OStream StreamT> 
-auto& operator<<(StreamT& os, const SingleElementQt& elem) {
+template <OStream StreamT>
+decltype(auto) operator<<(StreamT& os, const SingleElementQt& elem) {
+    if constexpr (std::same_as<StreamT, QDebug>) { QDebugStateSaver saver(os); }
     print_single_element(os, elem, 0);
     return os;
 }
 
 template <OStream StreamT>
-auto& operator<<(StreamT& os, const GroupElementQt& group) {
+decltype(auto) operator<<(StreamT& os, const GroupElementQt& group) {
+    if constexpr (std::same_as<StreamT, QDebug>) { QDebugStateSaver saver(os); }
     const auto& [group, size] = group;
-    os << "\tGruppo (quantità " << size << "): \n";
+    os << "\tGruppo (quantitÃ  " << size << "): \n";
     for (const auto& elem : group) {
         print_single_element(os, elem, 1);
     }
-    os << "\tQuantità del gruppo: " << size << '\n';
+    os << "\tQuantitÃ  del gruppo: " << size << '\n';
 }
 
 template <OStream StreamT>
-auto& operator<<(StreamT& os, const Composto& compo) {
-    os << "Quantità di questo composto: " << compo.quantity() << '\n';
+decltype(auto) operator<<(StreamT& os, const Composto& compo) {
+    if constexpr (std::same_as<StreamT, QDebug>) { QDebugStateSaver saver(os); }
+    os << "QuantitÃ  di questo composto: " << compo.quantity() << '\n';
     for (const auto& variant : compo) {
         if (std::holds_alternative<SingleElementQt>(variant)) {
             print_single_element(os, std::get<SingleElementQt>(variant), 1);
         } else if (std::holds_alternative<GroupElementQt>(variant)) {
-            const auto& [group, size] = std::get<GroupElementQt>(variant);
-            os << "\tGruppo (quantità " << size << "): \n";
+            const auto& group_element = std::get<GroupElementQt>(variant);
+            const auto& [group, size] = group_element;
+            os << "\tGruppo (quantitÃ  " << size << "): \n";
             for (const auto& elem : group) {
                 print_single_element(os, elem, 2);
             }
-            os << "\tQuantità del gruppo: " << size << '\n';
+            os << "\tQuantitÃ  del gruppo: " << size << '\n';
         } else {
             error("Variant is empty");
         }
     }
+    os << "\tMassa molecolare del composto: " << compo.molecular_mass();
     return os;
 }
 
-static void populate_arguments(std::vector<std::string>& arguments, int necessary_arguments, std::string_view prompt) {
-    std::cout << prompt;
-    // std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    fflush(stdin);
-    std::cin.clear();
-    while (necessary_arguments > 0) {
-        std::string line{};
-        std::getline(std::cin, line);
-        arguments.push_back(line);
-        --necessary_arguments;
-    }
-}
-
 inline auto print = [](const auto& obj) {
-    std::cout << obj << '\n';
+    qDebug() << obj << '\n';
 };
 
-inline auto wprint = [](const auto& obj) {
-    std::wcout << obj << L'\n';
+inline auto print_text = [](const auto& obj) -> QString {
+    QString text{};
+    QTextStream stream{&text};
+    stream << obj << '\n';
+    return text;
 };
 
 inline auto range_to_view_strip = [](std::ranges::range auto&& range) {
@@ -114,7 +146,7 @@ inline auto range_to_view_strip = [](std::ranges::range auto&& range) {
 enum class UpperState { Unknown, False, True };
 
 inline auto parse_group = [](std::string_view::const_iterator& it,
-                             std::string_view::const_iterator end) -> GroupElementRef {
+                             std::string_view::const_iterator end) -> std::optional<GroupElementRef> {
     std::vector<SingleElementQt> elements{};
     std::string curr_elem{};
     std::string curr_elem_size{};
@@ -131,9 +163,15 @@ inline auto parse_group = [](std::string_view::const_iterator& it,
         bool num = std::isdigit(c) != 0;
         upper = std::isupper(c) != 0 ? UpperState::True : UpperState::False;
         if ((!num && previous_is_num) || check_upper() || c == ')') {
-            if (curr_elem.empty()) error_invalid_element(curr_elem, c);
+            if (curr_elem.empty()) {
+                error_invalid_element(curr_elem, c);
+                return {};
+            }
             auto it = elements_map.find(curr_elem);
-            if (it == map_end) error_invalid_element(curr_elem);
+            if (it == map_end) {
+                error_invalid_element(curr_elem);
+                return {};
+            }
             size_t sz = curr_elem_size.empty() ? 1 : std::stoull(curr_elem_size);
             elements.emplace_back((*it).second, sz);
             curr_elem_size.clear();
@@ -147,16 +185,22 @@ inline auto parse_group = [](std::string_view::const_iterator& it,
             break;
         } else {
             curr_elem += c;
-            if (curr_elem.size() > 2) error_invalid_element(curr_elem);
+            if (curr_elem.size() > 2) {
+                error_invalid_element(curr_elem);
+                return {};
+            }
         }
         previous_is_num = num;
         previous_is_upper = upper;
     }
-    if (!curr_elem.empty()) error_invalid_element(curr_elem);
+    if (!curr_elem.empty()) {
+        error_invalid_element(curr_elem);
+        return {};
+    }
     return elements;
 };
 
-inline auto split_molecule_in_elements = [](std::string_view view) {
+inline auto split_molecule_in_elements = [](std::string_view view) -> std::optional<Composto> {
     std::vector<ElementQt> elements{};
     std::string curr_elem{};
     std::string curr_elem_size{};
@@ -172,42 +216,54 @@ inline auto split_molecule_in_elements = [](std::string_view view) {
     GroupElementRef group{};
     bool previous_was_group = false;
 
-    auto append_elem_or_group = [&](char c) {
+    auto append_elem_or_group = [&](char c) -> bool {
         size_t sz = curr_elem_size.empty() ? 1 : std::stoull(curr_elem_size);
         if (previous_was_group) {
             elements.push_back(ElementQt{std::in_place_index<1>, move(group), sz});
             previous_was_group = false;
         } else {
-            if (curr_elem.empty()) error_invalid_element(curr_elem, c);
+            if (curr_elem.empty()) {
+                error_invalid_element(curr_elem, c);
+                return false;
+            }
             auto it = elements_map.find(curr_elem);
-            if (it == map_end) error_invalid_element(curr_elem);
+            if (it == map_end) {
+                error_invalid_element(curr_elem);
+                return false;
+            }
             elements.push_back(ElementQt{std::in_place_index<0>, (*it).second, sz});
             curr_elem_size.clear();
             curr_elem.clear();
             curr_elem += c;
         }
+        return true;
     };
 
     for (auto it = view.begin(); it != view.end(); ++it) {
         auto c = *it;
         bool num = std::isdigit(c) != 0;
         if (num && upper == UpperState::Unknown) {
-            // numero prima della molecola, quindi la quantità.
+            // numero prima della molecola, quindi la quantitÃ .
             quantity_str += c;
             continue;
         }
         upper = std::isupper(c) != 0 ? UpperState::True : UpperState::False;
         if ((!num && previous_is_num) || check_upper()) {
-            append_elem_or_group(c);
+            if (!append_elem_or_group(c)) { return {}; }
         } else if (num) {
             curr_elem_size += c;
         } else if (c == '(') {
-            append_elem_or_group(c);
+            if (!append_elem_or_group(c)) { return {}; }
             previous_was_group = true;
-            group = std::move(parse_group(++it, view.end()));
+            auto maybe_group = parse_group(++it, view.end());
+            if (!maybe_group.has_value()) { return {}; }
+            group = std::move(maybe_group.value());
         } else {
             curr_elem += c;
-            if (curr_elem.size() > 2) error_invalid_element(curr_elem);
+            if (curr_elem.size() > 2) {
+                error_invalid_element(curr_elem);
+                return {};
+            }
         }
         previous_is_num = num;
         previous_is_upper = upper;
@@ -216,9 +272,15 @@ inline auto split_molecule_in_elements = [](std::string_view view) {
     if (previous_was_group) {
         elements.emplace_back(ElementQt{std::in_place_index<1>, std::move(group), sz});
     } else {
-        if (curr_elem.empty()) error_invalid_element(curr_elem);
+        if (curr_elem.empty()) {
+            error_invalid_element(curr_elem);
+            return {};
+        }
         auto it = elements_map.find(curr_elem);
-        if (it == map_end) error_invalid_element(curr_elem);
+        if (it == map_end) {
+            error_invalid_element(curr_elem);
+            return {};
+        }
         elements.emplace_back(ElementQt{std::in_place_index<0>, (*it).second, sz});
     }
     size_t quantity = quantity_str.empty() ? 1 : std::stoull(quantity_str);
@@ -254,7 +316,7 @@ int levenshtein_distance(std::string_view s1, std::string_view s2) {
     return distance;
 }
 
-[[noreturn]] void error_invalid_element(const std::string& element, char c) {
+void error_invalid_element(const std::string& element, char c) {
     if (element.empty()) {
         if (c == '\0')
             error("Manca l'ultimo elemento");
@@ -272,38 +334,61 @@ int levenshtein_distance(std::string_view s1, std::string_view s2) {
     }
 }
 
-void do_balance(std::vector<std::string>& arguments) {
-    if (arguments.empty())
-        populate_arguments(
-        arguments, 1, "Inserisci <reagenti> -> <prodotti> (reagenti e prodotti devono essere divisi da un +):\n"sv);
-    auto view =
-    arguments[0] | std::views::split("->"sv) | std::views::transform(range_to_view_strip) | std::views::common;
-    if (std::ranges::distance(view) != 2) { error("Formato della reazione non valido"); }
+QString do_balance(const std::string& argument) {
+    auto view = argument | std::views::split("->"sv) | std::views::transform(range_to_view_strip) | std::views::common;
+    if (std::ranges::distance(view) != 2) {
+        error("Formato della reazione non valido");
+        return last_error;
+    }
 
+    bool had_error = false;
     Reazione r{};
     auto vit = view.begin();
     std::ranges::copy(*vit | std::views::split('+') | std::views::transform(range_to_view_strip) |
-                      std::views::transform(split_molecule_in_elements),
+                      std::views::transform([&](std::string_view view) -> Composto {
+                          auto maybe_composto = split_molecule_in_elements(view);
+                          if (!maybe_composto.has_value()) {
+                              had_error = true;
+                              return Composto{{}, 0};
+                          }
+                          return maybe_composto.value();
+                      }),
                       std::back_inserter(r.reagenti));
+    if (had_error) return last_error;
     ++vit;
     std::ranges::copy(*vit | std::views::split('+') | std::views::transform(range_to_view_strip) |
-                      std::views::transform(split_molecule_in_elements),
+                      std::views::transform([&](std::string_view view) -> Composto {
+                          auto maybe_composto = split_molecule_in_elements(view);
+                          if (!maybe_composto.has_value()) {
+                              had_error = true;
+                              return Composto{{}, 0};
+                          }
+                          return maybe_composto.value();
+                      }),
                       std::back_inserter(r.prodotti));
-    std::ranges::for_each(r.reagenti, print);
-    std::ranges::for_each(r.prodotti, print);
+    if (had_error) return last_error;
 
-    TODO();
+    QString result{"Reagenti:\n"};
+    for (const auto& reagente : r.reagenti) {
+        result.append(print_text(reagente));
+    }
+    result.append("Prodotti:\n");
+    for (const auto& prodotto : r.prodotti) {
+        result.append(print_text(prodotto));
+    }
+
+    return result;
 }
-void do_naming(std::vector<std::string>& arguments) {
-    if (arguments.empty()) populate_arguments(arguments, 1, "Inserisci la formula della molecola da nominare:\n"sv);
-    std::string_view formula = arguments[0];
+QString do_naming(const std::string& argument) {
+    std::string_view formula = argument;
     TODO();
+    return last_error;
 }
-void do_reduction(std::vector<std::string>& arguments) {
-    if (arguments.empty()) populate_arguments(arguments, 1, "Inserisci la formula della molecola da ridurre:\n"sv);
+QString do_reduction(const std::string& argument) {
     TODO();
+    return last_error;
 }
-void do_other(std::vector<std::string>& arguments) {
-    if (arguments.empty()) populate_arguments(arguments, 1, "Inserisci...\n"sv);
+QString do_other(const std::string& argument) {
     TODO();
+    return last_error;
 }

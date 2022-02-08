@@ -2,6 +2,7 @@
 #include "Actions.h"
 #include <type_traits>
 #include <cstdlib>
+#include <QString>
 
 template <typename E>
 requires std::is_enum_v<E>
@@ -23,3 +24,15 @@ enum class Azione {
 
     __SIZE__
 };
+
+using callback_t = QString (*)(const std::string&);
+
+struct NamedCallback {
+    std::string name;
+    callback_t callback;
+};
+
+static inline NamedCallback callbacks[from_enum(Azione::__SIZE__)] = {{"Nomenclatura"s, &do_naming},
+                                                                      {"Bilanciamento"s, &do_balance},
+                                                                      {"Riduzione"s, &do_reduction},
+                                                                      {"Altro..."s, &do_other}};

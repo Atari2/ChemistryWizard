@@ -14,7 +14,7 @@ template <typename T>
 concept QTStream = std::same_as<T, QDebug> || std::same_as<T, QTextStream>;
 
 template <typename T>
-concept OStream = std::same_as<T, std::ostream> || std::same_as<T, std::wostream> || QTStream<T>;
+concept OStream = std::same_as<T, std::ostream> || QTStream<T>;
 
 decltype(auto) operator<<(QTStream auto& dbg, const std::string& str) {
     if constexpr (std::same_as<decltype(dbg), QDebug>) {
@@ -51,11 +51,7 @@ template <OStream StreamT,
 void print_single_element(StreamT& os, const SingleElementQt& elem, size_t n_tabs) {
     StringT tabs(n_tabs, '\t');
     const auto& [belem, sz] = elem;
-    if constexpr (std::same_as<StreamT, std::wostream>) {
-        os << tabs << belem->wfull_name() << ' ' << belem->wname() << ' ' << belem->na() << ' ' << belem->ma();
-    } else {
-        os << tabs << belem->full_name() << ' ' << belem->name() << ' ' << belem->na() << ' ' << belem->ma();
-    }
+    os << tabs << belem->full_name() << ' ' << belem->name() << ' ' << belem->na() << ' ' << belem->ma();
     if (belem->size_no() > 0) {
         os << ' ';
         for (size_t i = 0; i < belem->size_no(); i++) {

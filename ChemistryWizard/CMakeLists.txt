@@ -83,6 +83,7 @@ add_custom_command(TARGET ChemistryWizardUI POST_BUILD
     COMMENT "Running windeployqt..."
 )
 
+target_compile_options(ChemistryWizardUI PRIVATE /Zc:preprocessor)
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_CONFIGURATION_TYPES STREQUAL "Release")
     message(STATUS "Building Release, removing qDebug()")
     target_compile_definitions(ChemistryWizardUI PRIVATE QT_NO_DEBUG_OUTPUT)

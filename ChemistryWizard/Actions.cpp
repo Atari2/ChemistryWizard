@@ -286,9 +286,11 @@ inline auto split_molecule_in_elements = [](std::string_view view) -> std::optio
 int levenshtein_distance(std::string_view s1, std::string_view s2) {
     size_t m = s1.size();
     size_t n = s2.size();
-
-    int* prev = new int[(n + 1) * sizeof(int)];
-    int* curr = new int[(n + 1) * sizeof(int)];
+    std::vector<int> prev{};
+    prev.resize(n + 1);
+    std::iota(prev.begin(), prev.end(), 0);
+    std::vector<int> curr{};
+    curr.resize(n + 1);
 
     for (size_t i = 0; i <= n; i++)
         prev[i] = static_cast<int>(i);
@@ -304,11 +306,9 @@ int levenshtein_distance(std::string_view s1, std::string_view s2) {
             }
         }
         std::swap(prev, curr);
-        std::memset(curr, 0, sizeof(int) * (n + 1));
+        curr.assign(curr.size(), 0);
     }
     int distance = prev[n];
-    delete[] curr;
-    delete[] prev;
     return distance;
 }
 
